@@ -27,7 +27,7 @@ namespace LiteRP {
             // 渲染相机
             for (int cameraIndex = 0; cameraIndex < cameras.Count; cameraIndex++) {
                 Camera camera = cameras[cameraIndex];
-
+                RenderCamera(context, camera);
             }
 
             // 结束渲染上下文
