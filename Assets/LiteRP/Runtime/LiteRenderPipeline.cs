@@ -5,6 +5,8 @@ using System.Collections.Generic;
 namespace LiteRP {
     public class LiteRenderPipeline : RenderPipeline {
 
+        private static readonly ShaderTagId s_ShaderTagId = new ShaderTagId("SRPDefaultUnlit");
+
         // 为了兼容不得不保留的老接口，现在不用
         // 不用是因为 Camera[] 不够动态，而 Render 又是那种调用频繁的接口，一旦有列表内元素增删变化，会造成额外的开销
         // 
@@ -53,18 +55,56 @@ namespace LiteRP {
             CommandBuffer cb = CommandBufferPool.Get(camera.name);
             // 3：设置相机属性参数
             context.SetupCameraProperties(camera);
-            // 清理渲染目标
-            // 指定渲染排序设置 SortSettings
-            // 指定渲染状态设置 DrawSettings
-            // 指定渲染过滤设置 FilterSettings
-            // 创建渲染列表
-            // 绘制渲染列表
-            // 提交命令缓冲区
+
+            var clearFlags = camera.clearFlags;
+            bool clearSkybox = clearFlags == CameraClearFlags.Skybox;
+            bool clearDepth = clearFlags != CameraClearFlags.Nothing;
+            bool clearColor = clearFlags == CameraClearFlags.Color;
+
+            // 4：清理渲染目标
+            // 这里 srp 的颜色空间是线性空间，需要转换到 build-in 下的 gamma 空间，才能正确显示编辑器下 camera 对应的背景颜色。
+            cb.ClearRenderTarget(true, true, CoreUtils.ConvertSRGBToActiveColorSpace(camera.backgroundColor));
+
+            if (clearSkybox) {
+                // 虽然可以使用 context.DrawSkybox(camera); 但是接口已经过时了
+                // 绘制天空盒
+                var skyboxRendererList = context.CreateSkyboxRendererList(camera);
+                cb.DrawRendererList(skyboxRendererList);
+            }
+
+            // 5：指定渲染排序设置 SortSettings
+            var sortSettings = new SortingSettings(camera);
+            // 6：指定渲染状态设置 DrawSettings
+            var drawSettings = new DrawingSettings(new ShaderTagId("SRPDefaultUnlit"), sortSettings);
+
+            // 789 渲染物体
+
+            // 绘制不透明物体
+            sortSettings.criteria = SortingCriteria.CommonOpaque;
+            // 7：指定渲染过滤设置 FilterSettings
+            var filterSettings = new FilteringSettings(RenderQueueRange.opaque);
+            // 8：创建渲染对象列表
+            var rendererListParams = new RendererListParams(cullingResults, drawSettings, filterSettings);
+            var rendererList = context.CreateRendererList(ref rendererListParams);
+            // 9：绘制渲染列表
+            cb.DrawRendererList(rendererList);
+
+            // 绘制半透明物体
+            sortSettings.criteria = SortingCriteria.CommonTransparent;
+            // 7：指定渲染过滤设置 FilterSettings
+            filterSettings = new FilteringSettings(RenderQueueRange.transparent);
+            // 8：创建渲染对象列表
+            rendererListParams = new RendererListParams(cullingResults, drawSettings, filterSettings);
+            rendererList = context.CreateRendererList(ref rendererListParams);
+            // 9：绘制渲染列表
+            cb.DrawRendererList(rendererList);
+
+            // 10：提交命令缓冲区
             context.ExecuteCommandBuffer(cb);
-            // 释放命令缓冲区
+            // 11：释放命令缓冲区
             cb.Clear();
             CommandBufferPool.Release(cb);
-            // 提交渲染上下文
+            // 12：提交渲染上下文
             context.Submit();
             // 结束渲染相机
             EndCameraRendering(context, camera);
