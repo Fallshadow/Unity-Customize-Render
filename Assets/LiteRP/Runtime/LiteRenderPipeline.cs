@@ -22,6 +22,7 @@ namespace LiteRP {
 
         // 初始化渲染图
         private void InitializeRenderGraph() {
+            RTHandles.Initialize(Screen.width, Screen.height);
             m_RenderGraph = new RenderGraph("LiteRPRenderGraph");
             m_LiteRenderGraphRecorder = new LiteRenderGraphRecorder();
             m_ContextContainer = new ContextContainer();
@@ -31,6 +32,7 @@ namespace LiteRP {
         private void CleanupRenderGraph() {
             m_ContextContainer?.Dispose();
             m_ContextContainer = null;
+            m_LiteRenderGraphRecorder?.Dispose();
             m_LiteRenderGraphRecorder = null;
             m_RenderGraph?.Cleanup();
             m_RenderGraph = null;
@@ -79,8 +81,6 @@ namespace LiteRP {
             // 为相机创建 CommandBuffer
             // CommandBufferPool 需要程序集引用 core.runtime 和 core.runtime.shared
             CommandBuffer cmd = CommandBufferPool.Get(camera.name);
-            // 设置相机属性参数
-            context.SetupCameraProperties(camera);
 
             // 记录并执行渲染图
             RecordAndExecuteRenderGraph(context, camera, cmd);
