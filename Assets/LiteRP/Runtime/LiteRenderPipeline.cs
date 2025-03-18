@@ -2,11 +2,10 @@
 using UnityEngine;
 using System.Collections.Generic;
 using UnityEngine.Rendering.RenderGraphModule;
+using LiteRP.FrameData;
 
 namespace LiteRP {
     public class LiteRenderPipeline : RenderPipeline {
-
-        private static readonly ShaderTagId s_ShaderTagId = new ShaderTagId("SRPDefaultUnlit");
 
         private RenderGraph m_RenderGraph = null; // 渲染图
         private LiteRenderGraphRecorder m_LiteRenderGraphRecorder = null; // 渲染图记录器
@@ -77,30 +76,20 @@ namespace LiteRP {
             if (!PrepareFrameData(context, camera))
                 return;
 
-            // 相机剔除
-            // 使用引擎内固定的流程完成，这一步对应在 profiler 中的表现就是 CullScriptable 函数过程，这一过程只能通过降低场景复杂度来节省开销（我们又改不到引擎源码）
-            // 
-            // 获取相机剔除参数，并进行剔除
-            ScriptableCullingParameters cullingParameters;
-            if(!camera.TryGetCullingParameters(out cullingParameters)) {
-                return;
-            }
-
-            CullingResults cullingResults = context.Cull(ref cullingParameters);
             // 为相机创建 CommandBuffer
             // CommandBufferPool 需要程序集引用 core.runtime 和 core.runtime.shared
-            CommandBuffer cmdBuffer = CommandBufferPool.Get(camera.name);
+            CommandBuffer cmd = CommandBufferPool.Get(camera.name);
             // 设置相机属性参数
             context.SetupCameraProperties(camera);
 
             // 记录并执行渲染图
-            RecordAndExecuteRenderGraph(context, camera, cmdBuffer);
+            RecordAndExecuteRenderGraph(context, camera, cmd);
 
             // 提交命令缓冲区
-            context.ExecuteCommandBuffer(cmdBuffer);
+            context.ExecuteCommandBuffer(cmd);
             // 释放命令缓冲区
-            cmdBuffer.Clear();
-            CommandBufferPool.Release(cmdBuffer);
+            cmd.Clear();
+            CommandBufferPool.Release(cmd);
             // 提交渲染上下文
             context.Submit();
             // 结束渲染相机
@@ -125,7 +114,14 @@ namespace LiteRP {
         }
 
         private bool PrepareFrameData(ScriptableRenderContext context, Camera camera) {
-
+            // 获取相机剔除参数，并进行剔除
+            ScriptableCullingParameters cullingParameters;
+            if (!camera.TryGetCullingParameters(out cullingParameters))
+                return false;
+            CullingResults cullingResults = context.Cull(ref cullingParameters);
+            CameraData cameraData = m_ContextContainer.GetOrCreate<CameraData>();
+            cameraData.camera = camera;
+            cameraData.cullingResults = cullingResults;
             return true;
         }
     }
