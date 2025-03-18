@@ -1,11 +1,41 @@
 ﻿using UnityEngine.Rendering;
 using UnityEngine;
 using System.Collections.Generic;
+using UnityEngine.Rendering.RenderGraphModule;
 
 namespace LiteRP {
     public class LiteRenderPipeline : RenderPipeline {
 
         private static readonly ShaderTagId s_ShaderTagId = new ShaderTagId("SRPDefaultUnlit");
+
+        private RenderGraph m_RenderGraph = null; // 渲染图
+        private LiteRenderGraphRecorder m_LiteRenderGraphRecorder = null; // 渲染图记录器
+        private ContextContainer m_ContextContainer = null; // 上下文容器
+
+        public LiteRenderPipeline() {
+            InitializeRenderGraph();
+        }
+
+        protected override void Dispose(bool disposing) {
+            CleanupRenderGraph();
+            base.Dispose(disposing);
+        }
+
+        // 初始化渲染图
+        private void InitializeRenderGraph() {
+            m_RenderGraph = new RenderGraph("LiteRPRenderGraph");
+            m_LiteRenderGraphRecorder = new LiteRenderGraphRecorder();
+            m_ContextContainer = new ContextContainer();
+        }
+
+        // 清理渲染图
+        private void CleanupRenderGraph() {
+            m_ContextContainer?.Dispose();
+            m_ContextContainer = null;
+            m_LiteRenderGraphRecorder = null;
+            m_RenderGraph?.Cleanup();
+            m_RenderGraph = null;
+        }
 
         // 为了兼容不得不保留的老接口，现在不用
         // 不用是因为 Camera[] 不够动态，而 Render 又是那种调用频繁的接口，一旦有列表内元素增删变化，会造成额外的开销
@@ -32,6 +62,9 @@ namespace LiteRP {
                 RenderCamera(context, camera);
             }
 
+            // 结束渲染图
+            m_RenderGraph.EndFrame();
+
             // 结束渲染上下文
             EndContextRendering(context, cameras);
         }
@@ -40,7 +73,11 @@ namespace LiteRP {
             // 开始渲染相机
             BeginCameraRendering(context, camera);
 
-            // 1: 相机剔除
+            // 准备 FrameData
+            if (!PrepareFrameData(context, camera))
+                return;
+
+            // 相机剔除
             // 使用引擎内固定的流程完成，这一步对应在 profiler 中的表现就是 CullScriptable 函数过程，这一过程只能通过降低场景复杂度来节省开销（我们又改不到引擎源码）
             // 
             // 获取相机剔除参数，并进行剔除
@@ -50,64 +87,46 @@ namespace LiteRP {
             }
 
             CullingResults cullingResults = context.Cull(ref cullingParameters);
-            // 2：为相机创建 CommandBuffer
+            // 为相机创建 CommandBuffer
             // CommandBufferPool 需要程序集引用 core.runtime 和 core.runtime.shared
-            CommandBuffer cb = CommandBufferPool.Get(camera.name);
-            // 3：设置相机属性参数
+            CommandBuffer cmdBuffer = CommandBufferPool.Get(camera.name);
+            // 设置相机属性参数
             context.SetupCameraProperties(camera);
 
-            var clearFlags = camera.clearFlags;
-            bool clearSkybox = clearFlags == CameraClearFlags.Skybox;
-            bool clearDepth = clearFlags != CameraClearFlags.Nothing;
-            bool clearColor = clearFlags == CameraClearFlags.Color;
+            // 记录并执行渲染图
+            RecordAndExecuteRenderGraph(context, camera, cmdBuffer);
 
-            // 4：清理渲染目标
-            // 这里 srp 的颜色空间是线性空间，需要转换到 build-in 下的 gamma 空间，才能正确显示编辑器下 camera 对应的背景颜色。
-            cb.ClearRenderTarget(true, true, CoreUtils.ConvertSRGBToActiveColorSpace(camera.backgroundColor));
-
-            if (clearSkybox) {
-                // 虽然可以使用 context.DrawSkybox(camera); 但是接口已经过时了
-                // 绘制天空盒
-                var skyboxRendererList = context.CreateSkyboxRendererList(camera);
-                cb.DrawRendererList(skyboxRendererList);
-            }
-
-            // 5：指定渲染排序设置 SortSettings
-            var sortSettings = new SortingSettings(camera);
-            // 6：指定渲染状态设置 DrawSettings
-            var drawSettings = new DrawingSettings(new ShaderTagId("SRPDefaultUnlit"), sortSettings);
-
-            // 789 渲染物体
-
-            // 绘制不透明物体
-            sortSettings.criteria = SortingCriteria.CommonOpaque;
-            // 7：指定渲染过滤设置 FilterSettings
-            var filterSettings = new FilteringSettings(RenderQueueRange.opaque);
-            // 8：创建渲染对象列表
-            var rendererListParams = new RendererListParams(cullingResults, drawSettings, filterSettings);
-            var rendererList = context.CreateRendererList(ref rendererListParams);
-            // 9：绘制渲染列表
-            cb.DrawRendererList(rendererList);
-
-            // 绘制半透明物体
-            sortSettings.criteria = SortingCriteria.CommonTransparent;
-            // 7：指定渲染过滤设置 FilterSettings
-            filterSettings = new FilteringSettings(RenderQueueRange.transparent);
-            // 8：创建渲染对象列表
-            rendererListParams = new RendererListParams(cullingResults, drawSettings, filterSettings);
-            rendererList = context.CreateRendererList(ref rendererListParams);
-            // 9：绘制渲染列表
-            cb.DrawRendererList(rendererList);
-
-            // 10：提交命令缓冲区
-            context.ExecuteCommandBuffer(cb);
-            // 11：释放命令缓冲区
-            cb.Clear();
-            CommandBufferPool.Release(cb);
-            // 12：提交渲染上下文
+            // 提交命令缓冲区
+            context.ExecuteCommandBuffer(cmdBuffer);
+            // 释放命令缓冲区
+            cmdBuffer.Clear();
+            CommandBufferPool.Release(cmdBuffer);
+            // 提交渲染上下文
             context.Submit();
             // 结束渲染相机
             EndCameraRendering(context, camera);
+        }
+
+        private void RecordAndExecuteRenderGraph(ScriptableRenderContext context, Camera camera, CommandBuffer cmd) {
+            RenderGraphParameters renderGraphParameters = new RenderGraphParameters() {
+                executionName = camera.name,
+                commandBuffer = cmd,
+                scriptableRenderContext = context,
+                currentFrameIndex = Time.frameCount
+            };
+            // 开启录制线，用户自己定义
+            m_RenderGraph.BeginRecording(renderGraphParameters);
+
+            // 开启录制线
+            m_LiteRenderGraphRecorder.RecordRenderGraph(m_RenderGraph, m_ContextContainer);
+
+            // 执行线隐藏到 srp 中执行，用户不得干预
+            m_RenderGraph.EndRecordingAndExecute();
+        }
+
+        private bool PrepareFrameData(ScriptableRenderContext context, Camera camera) {
+
+            return true;
         }
     }
 }
