@@ -24,6 +24,7 @@ namespace LiteRP {
         private void InitializeRenderGraph() {
             RTHandles.Initialize(Screen.width, Screen.height);
             m_RenderGraph = new RenderGraph("LiteRPRenderGraph");
+            m_RenderGraph.nativeRenderPassesEnabled = LiteRPUtils.IsSupportsNativeRenderPassRenderGraphCompiler();
             m_LiteRenderGraphRecorder = new LiteRenderGraphRecorder();
             m_ContextContainer = new ContextContainer();
         }
@@ -80,7 +81,7 @@ namespace LiteRP {
 
             // 为相机创建 CommandBuffer
             // CommandBufferPool 需要程序集引用 core.runtime 和 core.runtime.shared
-            CommandBuffer cmd = CommandBufferPool.Get(camera.name);
+            CommandBuffer cmd = CommandBufferPool.Get();
 
             // 记录并执行渲染图
             RecordAndExecuteRenderGraph(context, camera, cmd);
@@ -115,8 +116,7 @@ namespace LiteRP {
 
         private bool PrepareFrameData(ScriptableRenderContext context, Camera camera) {
             // 获取相机剔除参数，并进行剔除
-            ScriptableCullingParameters cullingParameters;
-            if (!camera.TryGetCullingParameters(out cullingParameters))
+            if (!camera.TryGetCullingParameters(out var cullingParameters))
                 return false;
             CullingResults cullingResults = context.Cull(ref cullingParameters);
             CameraData cameraData = m_ContextContainer.GetOrCreate<CameraData>();

@@ -21,7 +21,8 @@ namespace LiteRP {
             AddSetupCameraPropertiesPass(renderGraph, cameraData);
 
             CameraClearFlags clearFlags = cameraData.camera.clearFlags;
-            if (clearFlags != CameraClearFlags.Nothing) {
+            // native 下不需要 ClearRender
+            if (!renderGraph.nativeRenderPassesEnabled && clearFlags != CameraClearFlags.Nothing) {
                 AddClearRenderTargetPass(renderGraph, cameraData);
             }
 
@@ -41,10 +42,13 @@ namespace LiteRP {
 
             Color cameraBackgroundColor = CoreUtils.ConvertSRGBToActiveColorSpace(cameraData.camera.backgroundColor);
 
+            bool clearOnFirstUse = !renderGraph.nativeRenderPassesEnabled;
+            bool discardOnLastUse = !renderGraph.nativeRenderPassesEnabled;
+
             ImportResourceParams importBackbufferColorParams = new ImportResourceParams();
-            importBackbufferColorParams.clearOnFirstUse = true;
+            importBackbufferColorParams.clearOnFirstUse = clearOnFirstUse;
             importBackbufferColorParams.clearColor = cameraBackgroundColor;
-            importBackbufferColorParams.discardOnLastUse = false;
+            importBackbufferColorParams.discardOnLastUse = discardOnLastUse;
 
             bool colorRT_sRGB = (QualitySettings.activeColorSpace == ColorSpace.Linear);
             RenderTargetInfo importInfoColor = new RenderTargetInfo();
