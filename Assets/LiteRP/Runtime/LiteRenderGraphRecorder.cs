@@ -10,6 +10,7 @@ namespace LiteRP {
     // 这里更推荐 IRenderGraphRecorder 接口，未来更方便统一管理所有自定义管线接口
     public partial class LiteRenderGraphRecorder : IRenderGraphRecorder, IDisposable {
 
+        private static readonly ShaderTagId s_shaderTagId = new ShaderTagId("SRPDefaultUnlit"); // 渲染标签ID
         private TextureHandle m_BackbufferColorHandle = TextureHandle.nullHandle;
         private RTHandle m_TargetColorHandle = null;
 
@@ -18,7 +19,19 @@ namespace LiteRP {
             CameraData cameraData = frameData.Get<CameraData>();
             CreateRenderGraphCameraRenderTargets(renderGraph, cameraData);
             AddSetupCameraPropertiesPass(renderGraph, cameraData);
-            AddDrawObjectsPass(renderGraph, cameraData);
+
+            CameraClearFlags clearFlags = cameraData.camera.clearFlags;
+            if (clearFlags != CameraClearFlags.Nothing) {
+                AddClearRenderTargetPass(renderGraph, cameraData);
+            }
+
+            AddDrawOpaqueObjectsPass(renderGraph, cameraData);
+
+            if (clearFlags == CameraClearFlags.Skybox && RenderSettings.skybox != null) {
+                AddDrawSkyBoxPass(renderGraph, cameraData);
+            }
+
+            AddDrawTransparentObjectsPass(renderGraph, cameraData);
         }
 
         private void CreateRenderGraphCameraRenderTargets(RenderGraph renderGraph, CameraData cameraData) {
