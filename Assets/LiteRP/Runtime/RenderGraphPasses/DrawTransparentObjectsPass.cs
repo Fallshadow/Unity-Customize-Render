@@ -13,7 +13,7 @@ namespace LiteRP {
         }
 
         private void AddDrawTransparentObjectsPass(RenderGraph renderGraph, CameraData cameraData) {
-            using (var builder = renderGraph.AddRasterRenderPass<DrawTransparentObjectsPassData>("Draw Opaque Objects Pass", out var passData, s_DrawTransparentObjectsProfilingSampler)) {
+            using (var builder = renderGraph.AddRasterRenderPass<DrawTransparentObjectsPassData>("Draw Transparent Objects Pass", out var passData, s_DrawTransparentObjectsProfilingSampler)) {
 
                 // 创建半透明对象渲染列表
                 RendererListDesc transparentRendererDesc = new RendererListDesc(s_shaderTagId, cameraData.cullingResults, cameraData.camera);
