@@ -15,25 +15,25 @@ namespace LiteRP {
         private void AddDrawTransparentObjectsPass(RenderGraph renderGraph, CameraData cameraData) {
             using (var builder = renderGraph.AddRasterRenderPass<DrawTransparentObjectsPassData>("Draw Opaque Objects Pass", out var passData, s_DrawTransparentObjectsProfilingSampler)) {
 
-                // ´´½¨°ëÍ¸Ã÷¶ÔÏóäÖÈ¾ÁĞ±í
+                // åˆ›å»ºåŠé€æ˜å¯¹è±¡æ¸²æŸ“åˆ—è¡¨
                 RendererListDesc transparentRendererDesc = new RendererListDesc(s_shaderTagId, cameraData.cullingResults, cameraData.camera);
                 transparentRendererDesc.sortingCriteria = SortingCriteria.CommonTransparent;
                 transparentRendererDesc.renderQueueRange = RenderQueueRange.transparent;
                 passData.transparentRendererListHandle = renderGraph.CreateRendererList(transparentRendererDesc);
-                // RenderGraph ÒıÓÃ²»Í¸Ã÷äÖÈ¾ÁĞ±í
+                // RenderGraph å¼•ç”¨ä¸é€æ˜æ¸²æŸ“åˆ—è¡¨
                 builder.UseRendererList(passData.transparentRendererListHandle);
 
-                // µ¼Èë BackBuffer
+                // å¯¼å…¥ BackBuffer
                 if (m_BackbufferColorHandle.IsValid())
                     builder.SetRenderAttachment(m_BackbufferColorHandle, 0, AccessFlags.Write);
                 if (m_BackbufferDepthHandle.IsValid())
                     builder.SetRenderAttachmentDepth(m_BackbufferDepthHandle, AccessFlags.Write);
 
-                // ÉèÖÃäÖÈ¾È«¾Ö×´Ì¬
+                // è®¾ç½®æ¸²æŸ“å…¨å±€çŠ¶æ€
                 builder.AllowPassCulling(false);
 
                 builder.SetRenderFunc((DrawTransparentObjectsPassData data, RasterGraphContext context) => {
-                    // µ÷ÓÃäÖÈ¾Ö¸Áî»æÖÆ
+                    // è°ƒç”¨æ¸²æŸ“æŒ‡ä»¤ç»˜åˆ¶
                     context.cmd.DrawRendererList(data.transparentRendererListHandle);
                 });
             }
