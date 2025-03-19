@@ -17,8 +17,7 @@ namespace LiteRP {
             if (!Handles.ShouldRenderGizmos() || cameraData.camera.sceneViewFilterMode == Camera.SceneViewFilterMode.ShowFiltered)
                 return;
 
-            using (var builder = renderGraph.AddRasterRenderPass<DrawEditorGizmoPassData>("Draw Editor Gizmo Pass", out var passData,
-                       s_DrawEditorGizmoProfilingSampler)) {
+            using (var builder = renderGraph.AddRasterRenderPass<DrawEditorGizmoPassData>("Draw Editor Gizmo Pass", out var passData, s_DrawEditorGizmoProfilingSampler)) {
                 if (m_BackbufferColorHandle.IsValid())
                     builder.SetRenderAttachment(m_BackbufferColorHandle, 0, AccessFlags.Write);
                 if (m_BackbufferDepthHandle.IsValid())
